@@ -1,10 +1,11 @@
-from django.db import models
+from django.db import models, transaction
 from django.utils import timezone
 from django.contrib.auth.models import UserManager
 
 
 class SoftDeleteQuerySet(models.QuerySet):
 
+    @transaction.atomic
     def soft_delete(self):
         try:
             self.deleted_item_pks = list(self.only("pk").values_list("pk", flat=True))
@@ -13,11 +14,13 @@ class SoftDeleteQuerySet(models.QuerySet):
             self.deleted_item_pks = []
             raise e
 
+    @transaction.atomic
     def restore(self, use_manager: models.Manager):
         if hasattr(self, "deleted_item_pks") and self.deleted_item_pks:
             use_manager.filter(pk__in=self.deleted_item_pks).update(deleted_at=None)
             self.deleted_item_pks = []
 
+    @transaction.atomic
     def delete(self, delete_permanently: bool = False, *args, **kwargs):
         if delete_permanently == True:
             return super().delete(*args, **kwargs)
@@ -60,10 +63,12 @@ class SoftDeleteModel(models.Model):
     objects = SoftDeleteManager()
     all_objects = models.Manager()
 
+    @transaction.atomic
     def soft_delete(self):
         self.deleted_at = timezone.now()
         self.save()
 
+    @transaction.atomic
     def delete(self, delete_permanently: bool = False, *args, **kwargs):
         """
         Soft Deletes the object from the database.
@@ -81,6 +86,7 @@ class SoftDeleteModel(models.Model):
             return super().delete(*args, **kwargs)
         self.soft_delete()
 
+    @transaction.atomic
     def restore(self):
         self.deleted_at = None
         self.save()
